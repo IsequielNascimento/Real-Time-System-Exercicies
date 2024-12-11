@@ -13,8 +13,7 @@ void *thread_code_a(void *threadno)
 {
     while (indice <= 27)
     {
-        while (flag1 == 0)
-            ;
+        while (flag1 == 0);
         listachar[indice] = 'a';
         indice++;
         flag2 = 1;
