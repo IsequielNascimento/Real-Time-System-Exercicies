@@ -1,141 +1,166 @@
-#include <stdio.h>
-#include <pthread.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include<stdio.h>
+#include<stddef.h>
+#include<unistd.h>
+#include<pthread.h>
 
-#define NUM_VERSOES 3
+int canal[6] = {-1, -1, -1, -1, -1, -1};
 
-// Estruturas para comunicação entre threads
-int canal[NUM_VERSOES] = {-1, -1, -1};
-int status[NUM_VERSOES] = {0, 0, 0};
-pthread_mutex_t mutex_canal = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond_canal = PTHREAD_COND_INITIALIZER;
-
-// Funções de envio e recepção
-void send_async(int *buf, int valor) {
-    pthread_mutex_lock(&mutex_canal);
-    *buf = valor;
-    pthread_cond_signal(&cond_canal);
-    pthread_mutex_unlock(&mutex_canal);
+void send_async(int *buf, int c)
+{
+	canal[c] =* buf;
+	return;
 }
 
-void receive(int *buf, int *valor) {
-    pthread_mutex_lock(&mutex_canal);
-    while (*buf == -1) {
-        pthread_cond_wait(&cond_canal, &mutex_canal);
-    }
-    *valor = *buf;
-    *buf = -1;
-    pthread_mutex_unlock(&mutex_canal);
+void receive(int *buf, int c)
+{
+	while(canal[c] == -1);
+	*buf = canal[c];
+	canal[c] = -1;
+	return;
 }
 
-// Funções das versões
-void *versao_1(void *arg) {
-    int voto = 5 + 5;
-    send_async(&canal[0], voto);
+//FUNÇÃO DE COMPARAÇÃO DE VETORES
 
-    int status_recebido;
-    receive(&status[0], &status_recebido);
-
-    if (status_recebido == 1) {
-        printf("Versão 1: Voto incorreto, finalizando.\n");
-    } else {
-        printf("Versão 1: Voto correto, continuando execução.\n");
-    }
-    return NULL;
+int comparacao(int vetor[], int *versao_com_erro)
+{
+	if((vetor[0]==vetor[1]) && (vetor[1]==vetor[2]))
+	{
+		*versao_com_erro = 0;
+		return vetor[0];
+	}
+	
+	if((vetor[0]==vetor[1]) && (vetor[1]!=vetor[2]))
+	{
+		*versao_com_erro = 3;
+		return vetor[0];
+	}
+	
+	if((vetor[0]!=vetor[1]) && (vetor[1]==vetor[2]))
+	{
+		*versao_com_erro = 1;
+		return vetor[1];
+	}
+	
+	if((vetor[0]==vetor[2]) && (vetor[1]!=vetor[2]))
+	{
+		*versao_com_erro = 2;
+		return vetor[0];
+	}
 }
 
-void *versao_2(void *arg) {
-    int voto = 2 * 5;
-    send_async(&canal[1], voto);
+// VERSÃO A
 
-    int status_recebido;
-    receive(&status[1], &status_recebido);
-
-    if (status_recebido == 1) {
-        printf("Versão 2: Voto incorreto, finalizando.\n");
-    } else {
-        printf("Versão 2: Voto correto, continuando execução.\n");
-    }
-    return NULL;
+void *thread_code_a(void *threadno)
+{
+	int voto = 10; 
+	int status;
+	send_async(&voto, 0);
+	receive(&status, 3);
+	if(status == 0){
+		printf("\nTA tem continuidade - Prossegue!");
+		while(1);
+	}
+	else{
+		printf("\nTA gera erro!\n");
+		return NULL;
+	}
 }
 
-void *versao_3(void *arg) {
-    int voto = 3 + 7;
-    send_async(&canal[2], voto);
+// VERSÃO B
 
-    int status_recebido;
-    receive(&status[2], &status_recebido);
-
-    if (status_recebido == 1) {
-        printf("Versão 3: Voto incorreto, finalizando.\n");
-    } else {
-        printf("Versão 3: Voto correto, continuando execução.\n");
-    }
-    return NULL;
+void *thread_code_b(void *threadno)
+{
+	int voto = 8; 
+	int status;
+	send_async(&voto, 1);
+	receive(&status, 4);
+	if(status == 0){
+		printf("\nTB tem continuidade - Prossegue!");
+		while(1);
+	}
+	else{
+		printf("\nTB gera erro!\n");
+		return NULL;
+	}
 }
 
-// Função de comparação
-int compara(int vetor_comp[], int *versao_erro) {
-    int votos[NUM_VERSOES] = {0};
-    for (int i = 0; i < NUM_VERSOES; i++) {
-        votos[vetor_comp[i]]++;
-    }
+// VERSÃO C
 
-    int voto_majoritario = -1;
-    for (int i = 0; i < NUM_VERSOES; i++) {
-        if (votos[vetor_comp[i]] > 1) {
-            voto_majoritario = vetor_comp[i];
-            break;
-        }
-    }
-
-    for (int i = 0; i < NUM_VERSOES; i++) {
-        if (vetor_comp[i] != voto_majoritario) {
-            *versao_erro = i;
-        }
-    }
-
-    return voto_majoritario;
+void *thread_code_c(void *threadno)
+{
+	int voto = 10; 
+	int status;
+	send_async(&voto, 2);
+	receive(&status, 5);
+	if(status == 0){
+		printf("\nTC tem continuidade - Prossegue!");
+		while(1);
+	}
+	else{
+		printf("\nTC gera erro!\n");
+		return NULL;
+	}
 }
 
-// Função do driver
-void *driver(void *arg) {
-    int vetor_comp[NUM_VERSOES];
+// PROCESSO DRIVER
 
-    for (int i = 0; i < NUM_VERSOES; i++) {
-        receive(&canal[i], &vetor_comp[i]);
-    }
-
-    int versao_erro;
-    int voto_majoritario = compara(vetor_comp, &versao_erro);
-
-    for (int i = 0; i < NUM_VERSOES; i++) {
-        if (i == versao_erro) {
-            send_async(&status[i], 1);
-        } else {
-            send_async(&status[i], 0);
-        }
-    }
-
-    printf("Voto majoritário: %d\n", voto_majoritario);
-    if (versao_erro != -1) {
-        printf("Versão com voto minoritário: Versão %d\n", versao_erro + 1);
-    }
-    return NULL;
+void *driver(void *threadno)
+{
+	int vetor_comp[3];
+	int statusok = 0;
+	int statuserro = 1;
+	int voto_majoritario; 
+	int versao_erro;
+	
+	receive(&vetor_comp[0], 0);
+	receive(&vetor_comp[1], 1);
+	receive(&vetor_comp[2], 2);
+	
+	voto_majoritario = comparacao(vetor_comp, &versao_erro);
+	printf("\nResposta Correta: %d\n\n", voto_majoritario);
+	
+	if(versao_erro == 0)
+	{
+		send_async(&statusok, 3);
+		send_async(&statusok, 4);
+		send_async(&statusok, 5);
+	}
+	
+	if(versao_erro == 1)
+	{
+		send_async(&statuserro, 3);
+		send_async(&statusok, 4);
+		send_async(&statusok, 5);
+	}
+	
+	if(versao_erro == 2)
+	{
+		send_async(&statusok, 3);
+		send_async(&statuserro, 4);
+		send_async(&statusok, 5);
+	}
+	
+	if(versao_erro == 3)
+	{
+		send_async(&statusok, 3);
+		send_async(&statusok, 4);
+		send_async(&statuserro, 5);
+	}
+	return NULL;
 }
 
-int main(void) {
-    pthread_t threads[NUM_VERSOES + 1];
-
-    pthread_create(&threads[0], NULL, versao_1, NULL);
-    pthread_create(&threads[1], NULL, versao_2, NULL);
-    pthread_create(&threads[2], NULL, versao_3, NULL);
-    pthread_create(&threads[3], NULL, driver, NULL);
-
-    for (int i = 0; i < NUM_VERSOES + 1; i++) {
-        pthread_join(threads[i], NULL);
-    }
-
-    return 0;
+int main(void)
+{
+	pthread_t TA;
+	pthread_t TB;
+	pthread_t TC;
+	pthread_t TD;
+	
+	pthread_create(&TA, NULL, thread_code_a, NULL);
+	pthread_create(&TB, NULL, thread_code_b, NULL);
+	pthread_create(&TC, NULL, thread_code_c, NULL);
+	pthread_create(&TD, NULL, driver, NULL);
+	
+	system("pause");
+	return 0;
 }

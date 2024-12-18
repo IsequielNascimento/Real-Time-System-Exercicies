@@ -1,111 +1,135 @@
-with Ada.Text_IO; use Ada.Text_IO;
-with Ada.Calendar; use Ada.Calendar;
-with Ada.Integer_Text_IO; use Ada.Integer_Text_IO;
+procedure Concurrent_System is
+   Canal : array (0 .. 5) of Integer := (-1, -1, -1, -1, -1, -1);
 
-procedure N_Version_Program is
+   procedure Send_Async (Buf : in Integer; C : in Integer) is
+   begin
+      Canal(C) := Buf;
+   end Send_Async;
 
-   type Buffer_Type is array (1 .. 3) of Integer;
-   Canal : Buffer_Type := (others => -1);
-   Status : Buffer_Type := (others => 0);
-   Voto_Majoritario : Integer := -1;
-   Versao_Erro : Integer := -1;
+   procedure Receive (Buf : out Integer; C : in Integer) is
+   begin
+      while Canal(C) = -1 loop
+         null;
+      end loop;
+      Buf := Canal(C);
+      Canal(C) := -1;
+   end Receive;
 
-   protected Canal_Protected is
-      procedure Send_Async(Index : Integer; Value : Integer);
-      procedure Receive(Index : Integer; Value : out Integer);
-   private
-      Buffer : Buffer_Type := (others => -1);
-   end Canal_Protected;
+   function Comparacao (Vetor : in array (0 .. 2) of Integer; Versao_Erro : out Integer) return Integer is
+   begin
+      if (Vetor(0) = Vetor(1)) and then (Vetor(1) = Vetor(2)) then
+         Versao_Erro := 0;
+         return Vetor(0);
+      elsif (Vetor(0) = Vetor(1)) and then (Vetor(1) /= Vetor(2)) then
+         Versao_Erro := 3;
+         return Vetor(0);
+      elsif (Vetor(0) /= Vetor(1)) and then (Vetor(1) = Vetor(2)) then
+         Versao_Erro := 1;
+         return Vetor(1);
+      else
+         Versao_Erro := 2;
+         return Vetor(0);
+      end if;
+   end Comparacao;
 
-   protected body Canal_Protected is
-      procedure Send_Async(Index : Integer; Value : Integer) is
-      begin
-         Buffer(Index) := Value;
-      end Send_Async;
+   task type Thread_A is
+   end Thread_A;
 
-      procedure Receive(Index : Integer; Value : out Integer) is
-      begin
-         while Buffer(Index) = -1 loop
+   task body Thread_A is
+      Voto : Integer := 10;
+      Status : Integer;
+   begin
+      Send_Async(Voto, 0);
+      Receive(Status, 3);
+      if Status = 0 then
+         Put_Line("TA tem continuidade - Prossegue!");
+         loop
             null;
          end loop;
-         Value := Buffer(Index);
-         Buffer(Index) := -1;
-      end Receive;
-   end Canal_Protected;
-
-   task type Versao (Index : Integer) is
-   end Versao;
-
-   task body Versao is
-      Voto : Integer;
-      Status_Recebido : Integer;
-   begin
-      if Index = 1 then
-         Voto := 5 + 5;
-      elsif Index = 2 then
-         Voto := 2 * 5;
-      elsif Index = 3 then
-         Voto := 3 + 7;
-      end if;
-
-      Canal_Protected.Send_Async(Index, Voto);
-      Canal_Protected.Receive(Index, Status_Recebido);
-
-      if Status_Recebido = 1 then
-         Put_Line("Versao " & Integer'Image(Index) & ": Voto incorreto, finalizando.");
       else
-         Put_Line("Versao " & Integer'Image(Index) & ": Voto correto, continuando execucao.");
+         Put_Line("TA gera erro!");
       end if;
-   end Versao;
+   end Thread_A;
 
-   task Driver is
+   task type Thread_B is
+   end Thread_B;
+
+   task body Thread_B is
+      Voto : Integer := 8;
+      Status : Integer;
+   begin
+      Send_Async(Voto, 1);
+      Receive(Status, 4);
+      if Status = 0 then
+         Put_Line("TB tem continuidade - Prossegue!");
+         loop
+            null;
+         end loop;
+      else
+         Put_Line("TB gera erro!");
+      end if;
+   end Thread_B;
+
+   task type Thread_C is
+   end Thread_C;
+
+   task body Thread_C is
+      Voto : Integer := 10;
+      Status : Integer;
+   begin
+      Send_Async(Voto, 2);
+      Receive(Status, 5);
+      if Status = 0 then
+         Put_Line("TC tem continuidade - Prossegue!");
+         loop
+            null; 
+         end loop;
+      else
+         Put_Line("TC gera erro!");
+      end if;
+   end Thread_C;
+
+   task type Driver is
    end Driver;
 
    task body Driver is
-      Vetor_Comp : Buffer_Type;
+      Vetor_Comp : array (0 .. 2) of Integer := (others => 0);
+      Status_Ok : Integer := 0;
+      Status_Erro : Integer := 1;
+      Voto_Majoritario : Integer;
+      Versao_Erro : Integer;
    begin
-      for I in 1 .. 3 loop
-         Canal_Protected.Receive(I, Vetor_Comp(I));
-      end loop;
+      Receive(Vetor_Comp(0), 0);
+      Receive(Vetor_Comp(1), 1);
+      Receive(Vetor_Comp(2), 2);
 
-      declare
-         Votos : array (1 .. 3) of Integer := (others => 0);
-      begin
-         for I in 1 .. 3 loop
-            Votos(Vetor_Comp(I)) := Votos(Vetor_Comp(I)) + 1;
-         end loop;
+      Voto_Majoritario := Comparacao(Vetor_Comp, Versao_Erro);
+      Put_Line("Resposta Correta: " & Integer'Image(Voto_Majoritario));
 
-         for I in 1 .. 3 loop
-            if Votos(Vetor_Comp(I)) > 1 then
-               Voto_Majoritario := Vetor_Comp(I);
-               exit;
-            end if;
-         end loop;
-
-         for I in 1 .. 3 loop
-            if Vetor_Comp(I) /= Voto_Majoritario then
-               Versao_Erro := I;
-            end if;
-         end loop;
-      end;
-
-      for I in 1 .. 3 loop
-         if I = Versao_Erro then
-            Canal_Protected.Send_Async(I, 1);
-         else
-            Canal_Protected.Send_Async(I, 0);
-         end if;
-      end loop;
-
-      Put_Line("Voto majoritario: " & Integer'Image(Voto_Majoritario));
-      if Versao_Erro /= -1 then
-         Put_Line("Versao com voto minoritario: Versao " & Integer'Image(Versao_Erro));
-      end if;
+      case Versao_Erro is
+         when 0 =>
+            Send_Async(Status_Ok, 3);
+            Send_Async(Status_Ok, 4);
+            Send_Async(Status_Ok, 5);
+         when 1 =>
+            Send_Async(Status_Erro, 3);
+            Send_Async(Status_Ok, 4);
+            Send_Async(Status_Ok, 5);
+         when 2 =>
+            Send_Async(Status_Ok, 3);
+            Send_Async(Status_Erro, 4);
+            Send_Async(Status_Ok, 5);
+         when 3 =>
+            Send_Async(Status_Ok, 3);
+            Send_Async(Status_Ok, 4);
+            Send_Async(Status_Erro, 5);
+      end case;
    end Driver;
 
-   V1, V2, V3 : Versao (Index => 1);
+   A : Thread_A;
+   B : Thread_B;
+   C : Thread_C;
    D : Driver;
-
 begin
-   null;
-end N_Version_Program;
+   null; 
+end Concurrent_System;
