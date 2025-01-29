@@ -4,12 +4,9 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 12
-#define NUM_ORIGINS 4
-#define NUM_DESTINATIONS 4
-#define TOTAL_THREADS (NUM_ORIGINS + NUM_DESTINATIONS + 1) // 4 origens, 4 destinos, 1 mailbox
+#define NUM_THREADS 8
 
-int canal[NUM_DESTINATIONS] = {-1, -1, -1, -1};
-
+// Estrutura da mailbox
 typedef struct {
     int buffer[BUFFER_SIZE];
     int count;
@@ -18,8 +15,7 @@ typedef struct {
     pthread_cond_t not_empty;
 } Mailbox;
 
-Mailbox mailbox;
-
+// Inicializa a mailbox
 void init_mailbox(Mailbox *mailbox) {
     mailbox->count = 0;
     pthread_mutex_init(&mailbox->lock, NULL);
@@ -27,6 +23,7 @@ void init_mailbox(Mailbox *mailbox) {
     pthread_cond_init(&mailbox->not_empty, NULL);
 }
 
+// Insere uma mensagem na mailbox
 void send_mail(Mailbox *mailbox, int message) {
     pthread_mutex_lock(&mailbox->lock);
     while (mailbox->count == BUFFER_SIZE) {
@@ -37,6 +34,7 @@ void send_mail(Mailbox *mailbox, int message) {
     pthread_mutex_unlock(&mailbox->lock);
 }
 
+// Remove uma mensagem da mailbox
 int receive_mail(Mailbox *mailbox) {
     int message;
     pthread_mutex_lock(&mailbox->lock);
@@ -49,78 +47,81 @@ int receive_mail(Mailbox *mailbox) {
     return message;
 }
 
-int converte_valor(unsigned char bytex2, unsigned char bytex1) {
-    return (bytex2 << 8) | bytex1;
+// Função para construir a mensagem com identificador de destino e valor
+int build_message(unsigned char dest, unsigned char value) {
+    return (dest << 8) | value;
 }
 
-void encontra_bytes(int valor, unsigned char *byte2, unsigned char *byte1) {
-    *byte2 = (valor >> 8) & 255;
-    *byte1 = valor & 255;
+// Função para extrair o identificador de destino e valor da mensagem
+void parse_message(int message, unsigned char *dest, unsigned char *value) {
+    *dest = (message >> 8) & 0xFF;
+    *value = message & 0xFF;
 }
 
-void send_async(int *buf, int c) {
-    canal[c] = *buf;
-}
-
-void receive(int *buf, int c) {
-    while (canal[c] == -1);
-    *buf = canal[c];
-    canal[c] = -1;
-}
-
+// Threads de origem
 void *origin_thread(void *arg) {
-    int thread_id = *(int *)arg;
-    unsigned char dest = thread_id;
+    Mailbox *mailbox = (Mailbox *)arg;
+    int thread_id = (int)(size_t)arg;
+    unsigned char dest = thread_id + 4; // Destinos E, F, G, H
     unsigned char value = (thread_id + 1) * 10;
-    int message = converte_valor(dest, value);
-    printf("Thread %c enviando mensagem: Dest=%c, Valor=%d\n", 'A' + thread_id, 'E' + thread_id, value);
-    send_mail(&mailbox, message);
+    int message = build_message(dest, value);
+
+    printf("Thread A%d enviando mensagem: Dest=%c, Valor=%d\n", thread_id, dest + 'E' - 4, value);
+    send_mail(mailbox, message);
+
     return NULL;
 }
 
+// Threads de destino
 void *destination_thread(void *arg) {
-    int thread_id = *(int *)arg;
+    Mailbox *mailbox = (Mailbox *)arg;
     unsigned char dest, value;
+
     while (1) {
-        int message;
-        receive(&message, thread_id);
-        encontra_bytes(message, &dest, &value);
-        printf("Thread %c recebeu mensagem: Valor=%d\n", 'E' + thread_id, value);
-        sleep(1);
+        int message = receive_mail(mailbox);
+        parse_message(message, &dest, &value);
+        printf("Thread %c recebeu mensagem: Valor=%d\n", dest + 'E', value);
+        sleep(1); // Simula processamento
     }
     return NULL;
 }
 
+// Thread da mailbox
 void *mailbox_thread(void *arg) {
+    Mailbox *mailbox = (Mailbox *)arg;
+    int messages[BUFFER_SIZE];
+    int i;
+
     while (1) {
-        int message = receive_mail(&mailbox);
-        unsigned char dest, value;
-        encontra_bytes(message, &dest, &value);
-        send_async(&message, dest);
+        for (i = 0; i < BUFFER_SIZE; ++i) {
+            messages[i] = receive_mail(mailbox);
+        }
+        for (i = 0; i < BUFFER_SIZE; ++i) {
+            send_mail(mailbox, messages[i]);
+        }
     }
     return NULL;
 }
 
 int main() {
-    pthread_t threads[TOTAL_THREADS];
+    pthread_t threads[NUM_THREADS];
+    Mailbox mailbox;
     init_mailbox(&mailbox);
-    int thread_ids[NUM_ORIGINS];
-    
-    pthread_create(&threads[NUM_ORIGINS + NUM_DESTINATIONS], NULL, mailbox_thread, NULL);
-    
-    for (int i = 0; i < NUM_ORIGINS; ++i) {
-        thread_ids[i] = i;
-        pthread_create(&threads[i], NULL, origin_thread, &thread_ids[i]);
+
+    // Criar threads de origem (A, B, C, D)
+    for (int i = 0; i < 4; ++i) {
+        pthread_create(&threads[i], NULL, origin_thread, (void *)(size_t)i);
     }
-    
-    for (int i = 0; i < NUM_DESTINATIONS; ++i) {
-        thread_ids[i] = i;
-        pthread_create(&threads[NUM_ORIGINS + i], NULL, destination_thread, &thread_ids[i]);
+
+    // Criar threads de destino (E, F, G, H)
+    for (int i = 4; i < 8; ++i) {
+        pthread_create(&threads[i], NULL, destination_thread, (void *)&mailbox);
     }
-    
-    for (int i = 0; i < TOTAL_THREADS; ++i) {
+
+    // Aguarda todas as threads
+    for (int i = 0; i < NUM_THREADS; ++i) {
         pthread_join(threads[i], NULL);
     }
-    
+
     return 0;
 }
