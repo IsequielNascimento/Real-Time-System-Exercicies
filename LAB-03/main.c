@@ -1,127 +1,107 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <unistd.h>
 
+#define NUM_ORIGENS 4
+#define NUM_DESTINOS 4
 #define BUFFER_SIZE 12
-#define NUM_THREADS 8
+#define TOTAL_MENSAGENS 4
 
-// Estrutura da mailbox
-typedef struct {
-    int buffer[BUFFER_SIZE];
-    int count;
-    pthread_mutex_t lock;
-    pthread_cond_t not_full;
-    pthread_cond_t not_empty;
-} Mailbox;
+int mailbox[BUFFER_SIZE];
+int mensagens[NUM_DESTINOS]; // Array separado para armazenar mensagens entregues
+int count = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond_mailbox = PTHREAD_COND_INITIALIZER;
+pthread_cond_t cond_destino[NUM_DESTINOS] = {PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER};
 
-// Inicializa a mailbox
-void init_mailbox(Mailbox *mailbox) {
-    mailbox->count = 0;
-    pthread_mutex_init(&mailbox->lock, NULL);
-    pthread_cond_init(&mailbox->not_full, NULL);
-    pthread_cond_init(&mailbox->not_empty, NULL);
+char *origens[NUM_ORIGENS] = {"A", "B", "C", "D"};
+char *destinos[NUM_DESTINOS] = {"E", "F", "G", "H"};
+
+// Função para compor a mensagem
+int converte_valor(unsigned char bytex2, unsigned char bytex1) {
+    return (bytex2 << 8) | bytex1;
 }
 
-// Insere uma mensagem na mailbox
-void send_mail(Mailbox *mailbox, int message) {
-    pthread_mutex_lock(&mailbox->lock);
-    while (mailbox->count == BUFFER_SIZE) {
-        pthread_cond_wait(&mailbox->not_full, &mailbox->lock);
+// Função para extrair os bytes da mensagem
+void encontra_bytes(int valor, unsigned char *byte2, unsigned char *byte1) {
+    *byte2 = (valor >> 8) & 0xFF;
+    *byte1 = valor & 0xFF;
+}
+
+void *thread_send(void *arg) {
+    int id = *((int *)arg);
+    unsigned char valores[NUM_ORIGENS] = {10, 20, 30, 40};
+    unsigned char destinos_id[NUM_ORIGENS] = {4, 5, 6, 7};
+    int frame = converte_valor(destinos_id[id], valores[id]);
+
+    pthread_mutex_lock(&mutex);
+    mailbox[count++] = frame;
+    printf("Origem %s enviou %d para %s\n", origens[id], valores[id], destinos[id]);
+    if (count == TOTAL_MENSAGENS) {
+        pthread_cond_signal(&cond_mailbox);
     }
-    mailbox->buffer[mailbox->count++] = message;
-    pthread_cond_signal(&mailbox->not_empty);
-    pthread_mutex_unlock(&mailbox->lock);
-}
-
-// Remove uma mensagem da mailbox
-int receive_mail(Mailbox *mailbox) {
-    int message;
-    pthread_mutex_lock(&mailbox->lock);
-    while (mailbox->count == 0) {
-        pthread_cond_wait(&mailbox->not_empty, &mailbox->lock);
-    }
-    message = mailbox->buffer[--mailbox->count];
-    pthread_cond_signal(&mailbox->not_full);
-    pthread_mutex_unlock(&mailbox->lock);
-    return message;
-}
-
-// Função para construir a mensagem com identificador de destino e valor
-int build_message(unsigned char dest, unsigned char value) {
-    return (dest << 8) | value;
-}
-
-// Função para extrair o identificador de destino e valor da mensagem
-void parse_message(int message, unsigned char *dest, unsigned char *value) {
-    *dest = (message >> 8) & 0xFF;
-    *value = message & 0xFF;
-}
-
-// Threads de origem
-void *origin_thread(void *arg) {
-    Mailbox *mailbox = (Mailbox *)arg;
-    int thread_id = (int)(size_t)arg;
-    unsigned char dest = thread_id + 4; // Destinos E, F, G, H
-    unsigned char value = (thread_id + 1) * 10;
-    int message = build_message(dest, value);
-
-    printf("Thread A%d enviando mensagem: Dest=%c, Valor=%d\n", thread_id, dest + 'E' - 4, value);
-    send_mail(mailbox, message);
+    pthread_mutex_unlock(&mutex);
 
     return NULL;
 }
 
-// Threads de destino
-void *destination_thread(void *arg) {
-    Mailbox *mailbox = (Mailbox *)arg;
-    unsigned char dest, value;
-
-    while (1) {
-        int message = receive_mail(mailbox);
-        parse_message(message, &dest, &value);
-        printf("Thread %c recebeu mensagem: Valor=%d\n", dest + 'E', value);
-        sleep(1); // Simula processamento
+void *thread_mailbox(void *arg) {
+    pthread_mutex_lock(&mutex);
+    while (count < TOTAL_MENSAGENS) {
+        pthread_cond_wait(&cond_mailbox, &mutex);
     }
+    
+    for (int i = 0; i < TOTAL_MENSAGENS; i++) {
+        unsigned char destino, valor;
+        encontra_bytes(mailbox[i], &destino, &valor);
+        int index = destino - 4;
+        mensagens[index] = valor; // Armazena no array correto
+        pthread_cond_signal(&cond_destino[index]);
+    }
+    pthread_mutex_unlock(&mutex);
     return NULL;
 }
 
-// Thread da mailbox
-void *mailbox_thread(void *arg) {
-    Mailbox *mailbox = (Mailbox *)arg;
-    int messages[BUFFER_SIZE];
-    int i;
-
-    while (1) {
-        for (i = 0; i < BUFFER_SIZE; ++i) {
-            messages[i] = receive_mail(mailbox);
-        }
-        for (i = 0; i < BUFFER_SIZE; ++i) {
-            send_mail(mailbox, messages[i]);
-        }
+void *thread_receive(void *arg) {
+    int id = *((int *)arg);
+    pthread_mutex_lock(&mutex);
+    while (mensagens[id] == -1) {
+        pthread_cond_wait(&cond_destino[id], &mutex);
     }
+    printf("Thread %s recebeu: %d\n", destinos[id], mensagens[id]);
+    pthread_mutex_unlock(&mutex);
     return NULL;
 }
 
-int main() {
-    pthread_t threads[NUM_THREADS];
-    Mailbox mailbox;
-    init_mailbox(&mailbox);
-
-    // Criar threads de origem (A, B, C, D)
-    for (int i = 0; i < 4; ++i) {
-        pthread_create(&threads[i], NULL, origin_thread, (void *)(size_t)i);
+int main(void) {
+    pthread_t senders[NUM_ORIGENS], receivers[NUM_DESTINOS], mailbox_thread;
+    int ids[NUM_ORIGENS] = {0, 1, 2, 3};
+    
+    for (int i = 0; i < BUFFER_SIZE; i++) {
+        mailbox[i] = -1;
     }
-
-    // Criar threads de destino (E, F, G, H)
-    for (int i = 4; i < 8; ++i) {
-        pthread_create(&threads[i], NULL, destination_thread, (void *)&mailbox);
+    for (int i = 0; i < NUM_DESTINOS; i++) {
+        mensagens[i] = -1;
     }
-
-    // Aguarda todas as threads
-    for (int i = 0; i < NUM_THREADS; ++i) {
-        pthread_join(threads[i], NULL);
+    
+    pthread_create(&mailbox_thread, NULL, thread_mailbox, NULL);
+    
+    for (int i = 0; i < NUM_ORIGENS; i++) {
+        pthread_create(&senders[i], NULL, thread_send, &ids[i]);
     }
-
+    for (int i = 0; i < NUM_DESTINOS; i++) {
+        pthread_create(&receivers[i], NULL, thread_receive, &ids[i]);
+    }
+    
+    for (int i = 0; i < NUM_ORIGENS; i++) {
+        pthread_join(senders[i], NULL);
+    }
+    pthread_join(mailbox_thread, NULL);
+    for (int i = 0; i < NUM_DESTINOS; i++) {
+        pthread_join(receivers[i], NULL);
+    }
+    
     return 0;
 }
