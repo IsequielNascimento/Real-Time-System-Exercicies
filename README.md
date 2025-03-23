@@ -1,71 +1,26 @@
-# Repositório de Sistemas de Tempo Real
+Here is the translated README in markdown format (`README.md`):
 
-Este repositório contém implementações de laboratórios da disciplina de Sistemas de Tempo Real, abordando conceitos de concorrência, comunicação entre threads e tolerância a falhas.
+```markdown
+# Real-Time Systems Repository
 
-## Estrutura do Repositório
+This repository contains implementations of labs for the Real-Time Systems course, covering concepts of concurrency, inter-thread communication, and fault tolerance.
 
-- **LAB 1**: Implementações de concorrência utilizando tarefas em Ada e threads em C.
-  - `main.adb`: Implementa uma sincronização entre tarefas em Ada utilizando flags de controle.
-  - `main.c`: Implementação equivalente em C utilizando pthreads.
+## Repository Structure
 
-- **LAB 2**: Implementação de comunicação entre processos através de um canal compartilhado.
-  - `main.c`: Utiliza um canal para enviar e receber mensagens de forma assíncrona, implementando um mecanismo de votação e tolerância a falhas.
+- **LAB 1**: Concurrency implementations using tasks in Ada and threads in C.
+  - `main.adb`: Implements synchronization between Ada tasks using control flags.
+  - `main.c`: Equivalent implementation in C using pthreads.
 
-- **LAB 3**: Implementação de uma Mailbox para gerenciar a comunicação entre threads.
-  - `main.c`: Utiliza threads para simular um sistema de comunicação assíncrona entre processos, garantindo a entrega das mensagens através de uma Mailbox intermediária.
+- **LAB 2**: Implementation of inter-process communication via a shared channel.
+  - `main.c`: Uses a channel to send and receive messages asynchronously, implementing a voting mechanism and fault tolerance.
 
-## Como Executar os Códigos
+- **LAB 3**: Implementation of a Mailbox to manage communication between threads.
+  - `main.c`: Uses threads to simulate an asynchronous communication system between processes, ensuring message delivery through an intermediate Mailbox.
 
-Os códigos foram executados nas plataformas onlines: onlinegdb.com para C e onecompiler.com/ada para ada
+## How to Run the Code
 
-<!-- 
-### Compilando e Executando o LAB 1
+The codes were executed on the following online platforms: onlinegdb.com for C and onecompiler.com/ada for Ada.
 
-#### Ada
-1. Compilar:
-   ```sh
-   gnatmake test_task.adb
-   ```
-2. Executar:
-   ```sh
-   ./test_task
-   ```
 
-#### C
-1. Compilar:
-   ```sh
-   gcc -o lab1 threads_lab1.c -lpthread
-   ```
-2. Executar:
-   ```sh
-   ./lab1
-   ```
-
-### Compilando e Executando o LAB 2
-1. Compilar:
-   ```sh
-   gcc -o lab2 threads_lab2.c -lpthread
-   ```
-2. Executar:
-   ```sh
-   ./lab2
-   ```
-
-### Compilando e Executando o LAB 3
-1. Compilar:
-   ```sh
-   gcc -o lab3 threads_lab3.c -lpthread
-   ```
-2. Executar:
-   ```sh
-   ./lab3
-   ``` -->
-<!-- 
-## Requisitos
-
-- **Para Ada**: GNAT (compilador Ada)
-- **Para C**: GCC e a biblioteca `pthread` -->
-
-## Autor
-Repositório criado para a disciplina de Sistemas de Tempo Real.
-
+## Author
+Repository created for the Real-Time Systems course.
